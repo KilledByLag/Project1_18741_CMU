@@ -77,7 +77,6 @@ def WifiReceiver(txsignal, level):
 
         return zeros_padded, message, message_length
 
-
     def level2():
         pass
 
