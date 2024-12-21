@@ -3,58 +3,106 @@ import sys
 import commpy as comm
 import commpy.channelcoding.convcode as check
 from wifitransmitter import WifiTransmitter
+from matplotlib import pyplot as plt
 
 
 
 class Demodulator:
+    """
+    A class to handle demodulation, decoding, and signal processing for a simulated Wi-Fi receiver.
+    Supports multiple decoding levels from basic message reconstruction to full OFDM frame synchronization.
+
+    """
 
     def __init__(self):
+        """
+
+        Initialize the Demodulator with required parameters and objects for decoding.
+
+        """
 
         #Some encoder parameters
         self.nfft = 64
         self.repetitive_coder = 3
         self.preamble = np.array([1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1,1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1])
         self.demodobj = comm.modulation.QAMModem(4)
-        self.trellis = {'00':{0:{'output':'00', 'next_state':'00'},
-                              1:{'output':'11', 'next_state':'01'}},
-                        '01':{0:{'output':'10', 'next_state':'10'},
-                              1:{'output':'01', 'next_state':'11'}},
-                        '10':{0:{'output':'11', 'next_state':'00'},
-                              1:{'output':'00', 'next_state':'01'}},
-                        '11':{0:{'output':'01', 'next_state':'10'},
-                              1:{'output':'10', 'next_state':'11'}},
-                        }
-        self.conv_encoder_rate = 0.5
-        
-    def hamm_dist(self, pair1, pair2):
 
-        if len(pair1) != len(pair2):
-            raise ValueError("Strings must be of same size")
-        return sum([c1 != c2 for c1, c2 in zip(pair1,pair2)])
+        #Trellis Structure
+        self.trellis = {'00':{'branch_1':{'input': 0,'output': -1-1j, 'prev_state':'00'},
+                              'branch_2':{'input': 0,'output':  1+1j, 'prev_state':'10'}},
+                        '01':{'branch_1':{'input': 1,'output':  1+1j, 'prev_state':'00'},
+                              'branch_2':{'input': 1,'output': -1-1j, 'prev_state':'10'}},
+                        '10':{'branch_1':{'input': 0,'output':  1-1j, 'prev_state':'01'},
+                              'branch_2':{'input': 0,'output': -1+1j, 'prev_state':'11'}},
+                        '11':{'branch_1':{'input': 1,'output': -1+1j, 'prev_state':'01'},
+                              'branch_2':{'input': 1,'output':  1-1j, 'prev_state':'11'}},
+                        }
+        
+    def euclidean_dist(self, num1, num2):
+        """
+
+        Compute the Euclidean distance between two complex numbers.
+
+        Args:
+            num1 (complex): First complex number.
+            num2 (complex): Second complex number.
+
+        Returns:
+            float: Euclidean distance between the two numbers.
+
+        """
+        return float(np.abs(num1 - num2))
     
     def viterbi_decoder(self, input):
+        """
+
+        Perform soft Viterbi decoding on the input signal using a predefined trellis structure.
+
+        Args:
+            input (numpy.ndarray): Encoded input signal (complex values).
+
+        Returns:
+            numpy.ndarray: Decoded bit sequence.
+
+        """
+        cumulative_metrics = [{'00': {'metric': 0, 'branch': None} ,
+                               '01': {'metric': np.inf,'branch': None},
+                               '10': {'metric': np.inf,'branch': None},
+                               '11': {'metric': np.inf,'branch': None}}]
         
+        for timestep in range(1, len(input)+1, 1):
+            cumulative_metrics.append({})
+            for state in cumulative_metrics[timestep-1]:
+                pm1 = cumulative_metrics[timestep - 1][
+                self.trellis[state]['branch_1']['prev_state']]['metric'] + self.euclidean_dist(self.trellis[state]['branch_1']['output'], input[timestep-1])
+                pm2 = cumulative_metrics[timestep - 1][
+                self.trellis[state]['branch_2']['prev_state']]['metric'] + self.euclidean_dist(self.trellis[state]['branch_2']['output'], input[timestep-1])
 
+                if pm1 < pm2:
+                    cumulative_metrics[timestep][state] = {'metric' : pm1, 'branch' : 'branch_1'}
+                else:
+                    cumulative_metrics[timestep][state] = {'metric' : pm2, 'branch' : 'branch_2'}
 
-            
+        decoded_output = []
 
+        #Traceback Path
+        currState = None
+        minMetric = np.inf
 
+        for state in cumulative_metrics[-1]:
+            if cumulative_metrics[-1][state]['metric'] <= minMetric:
+                currState, minMetric = state, cumulative_metrics[-1][state]['metric']
 
+        if currState != None:
+            for timestep in range(len(input),0,-1):
+                branch = cumulative_metrics[timestep][currState]['branch']
+                decoded_output.append(self.trellis[currState][branch]['input'])
+                currState = self.trellis[currState][branch]['prev_state']
+        decoded_output = np.array(decoded_output)[::-1]
 
-                
+        return decoded_output
 
-
-
-                
-
-
-
-
-
-
-
-        
-        
+    
 
     def level1(self, txsignal):
 
@@ -81,7 +129,7 @@ class Demodulator:
                 - message_length (int): The actual length of the original message.
         """
 
-        zeros_padded = 0 #No zeros padded in level 1
+        zeros_padded_level1 = 0 #No zeros padded in level 1
 
         #Extra zeros added by zfill to make length bits of size 2*self.nfft
         extra_zeros = (2*self.nfft)%self.repetitive_coder
@@ -120,32 +168,84 @@ class Demodulator:
         #Getting Rid of extra 0s (These were added in transmitter to make the message length a multiple of 128)
         message = message[:message_length]
 
-        return zeros_padded, message, message_length
+        return zeros_padded_level1, message, message_length
 
     def level2(self, txsignal):
+        """
 
-        #Reversing QAM Modulation
-        demod_signal = self.demodobj.demodulate(txsignal, demod_type="hard")
+        Decode the transmitted signal (Level 2) - Undo Convolutional Encoding and Pass to Level 1
 
-        #Un-concatenate the preamble and length (Both of these are not conv encoded, concatenate the length back after viterbi decoding)
-        # removed_preamble = demod_signal[:2*self.nfft]
-        removed_length = demod_signal[2*self.nfft: 2*2*self.nfft]
-        data = demod_signal[2*2*self.nfft:]
+        """
 
-        #Start Viterbi Decoding
+        zeros_padded_level2 = 0
 
-
-
-
+        #Isolate Length (It has not been convolutionally coded)
+        removed_length = txsignal[self.nfft:self.nfft*2]
         
-        pass
+        #Isolate Data
+        data = txsignal[2*self.nfft: ]
+
+        #Pass data to viterbi decoder
+        data = self.viterbi_decoder(data)
+
+        #QAM Demodulation for length
+        removed_length = self.demodobj.demodulate(removed_length, 'hard')
+
+        #Run level 1
+        pass_to_level1 = np.concatenate((removed_length, data))
+        zeros, message, message_length = self.level1(pass_to_level1)
+
+        return zeros+zeros_padded_level2, message, message_length
 
     def level3(self, txsignal):
-        pass
+        """
+        
+        Decode the transmitted signal (Level 3) - Undo OFDM and pass to Level 2
+
+        """
+
+        zeros_padded_level3 = 0
+
+        #FFTing the received signal
+
+        output = np.zeros_like(txsignal)
+        for i in range(0, len(txsignal)-self.nfft+1, 64):
+            chunk = txsignal[i:i+self.nfft]
+            output[i:i+self.nfft] = np.fft.fft(chunk)
+        
+        zeros, message, message_length = self.level2(output)
+
+        return zeros+zeros_padded_level3, message, message_length
 
     def level4(self, txsignal):
+        """
+        
+        Decode the transmitted signal (Level 3) - Perform Frame Synchronization, Remove Zeros padded and pass to Level 3
 
-        pass
+        """
+
+        #QAM Modulating and OFDM'ing the preamble to correlate with the noisy version of the signal
+        qam_modulated_preamble = self.demodobj.modulate(self.preamble.astype(bool))
+
+        nsym_preamble = int(len(qam_modulated_preamble)/self.nfft)
+
+        ofdm_preamble = np.zeros(len(qam_modulated_preamble), dtype=np.complex128)
+
+        for i in range(nsym_preamble):
+            chunk = qam_modulated_preamble[i*self.nfft:(i+1)*self.nfft]
+            ofdm_preamble[i*self.nfft:(i+1)*self.nfft] = np.fft.ifft(chunk)
+        
+        #Finding Max Correlation to do frame sync
+        correlation = np.correlate(ofdm_preamble, txsignal , mode='full')
+        corr_max = np.argmax(correlation)
+
+        data = txsignal[-(corr_max+1):]
+
+        zeros_padded_level4 = len(txsignal) - len(data)
+
+        zeros, message, message_length = self.level3(data)
+
+        return zeros_padded_level4+zeros, message, message_length
 
 
 def WifiReceiver(txsignal, level):
@@ -159,18 +259,19 @@ def WifiReceiver(txsignal, level):
     elif level == 3:
         zero_pad, message, length = demodulator.level3(txsignal=txsignal)
     elif level == 4:
-        zero_pad, message, length = demodulator.level3(txsignal=txsignal)
+        zero_pad, message, length = demodulator.level4(txsignal=txsignal)
     else:
         print("Invalid Level - Only Level 1 to 4 Allowed")
 
 
 
 def main():
-    #Takes in 3 args - Arg1 = message(str), Arg2 = level(int), Arg3 = SNR(int)
-    txsignal = WifiTransmitter('Sup bitch? I am better than you', 2) 
-
-    #Takes in 2 args - Arg1 = encodedmessage(np.array), Arg2 = level(int)
-    WifiReceiver(txsignal=txsignal, level=2)
+    """
+    Simulate a Wi-Fi transmitter and receiver.
+    """
+    zero_pad, txsignal, length = WifiTransmitter("Insert Text", 4)
+    
+    WifiReceiver(txsignal=txsignal, level=4)
 
 
 if __name__ == "__main__":
