@@ -5,6 +5,56 @@ import commpy.channelcoding.convcode as check
 from wifitransmitter import WifiTransmitter
 from matplotlib import pyplot as plt
 
+"""
+18741 - Computer Networks
+Project - 1 WifiReceiver
+Author - Premsai Peddi, CMU Alum (2024)
+
+Description:
+This project simulates a Wi-Fi receiver capable of processing transmitted signals across multiple levels of complexity. 
+It implements a modular pipeline for decoding transmitted signals, starting from basic repetitive coding and QAM 
+demodulation (Level 1) to full OFDM-based frame synchronization (Level 4). The receiver applies techniques like 
+Viterbi decoding for convolutionally encoded data and FFT-based operations for OFDM decoding.
+
+The receiver also performs frame synchronization by correlating a known preamble with the received signal to identify 
+the correct frame start point. This allows for an accurate reconstruction of transmitted messages.
+
+Requirements:
+    Libraries:
+        - numpy: For numerical computations and signal processing.
+        - matplotlib.pyplot: For visualizing correlation results during synchronization.
+        - commpy: For modulation and demodulation operations.
+        - wifitransmitter: A companion module to simulate transmitted Wi-Fi signals.
+    Python Version: Python 3.9 or above.
+    Configurations: The transmitter (`WifiTransmitter`) module is expected to handle signal encoding and transmission.
+
+Working:
+    - Starts by simulating a transmitted Wi-Fi signal using `WifiTransmitter`.
+    - Depending on the specified decoding level (1 to 4), the receiver applies corresponding demodulation and decoding techniques:
+        - Level 1: Handles repetitive coding and basic QAM demodulation.
+        - Level 2: Adds convolutional decoding using the Viterbi algorithm.
+        - Level 3: Incorporates FFT-based decoding for OFDM processing.
+        - Level 4: Performs frame synchronization using preamble correlation and processes the synchronized data.
+
+Usage:
+    To simulate the receiver:
+        1. Import the code into your project or run it as a standalone script.
+        2. Define the transmitted signal using `WifiTransmitter`.
+        3. Call `WifiReceiver(txsignal, level)` with the desired decoding level.
+    Example:
+        zero_pad, txsignal, length = WifiTransmitter("Sample Message", 4)
+        WifiReceiver(txsignal=txsignal, level=4)
+
+Outputs:
+    - Decoded Message: Reconstructed message transmitted by the simulated Wi-Fi transmitter.
+    - Synchronization Metrics: Correlation plot (Level 4) for frame synchronization.
+
+Note:
+    - Functions and variables are documented with detailed comments for clarity.
+    - DO NOT PLAIGARIZE!
+    - Results may vary depending on the accuracy of the transmitter's encoding process.
+"""
+
 
 
 class Demodulator:
